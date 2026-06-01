@@ -17,7 +17,7 @@ SIGMA = (
 
 # HELPER FUNCTIONS & CLASSES
 
-# Binary rotation funciton
+# Binary rotation function
 def rot(x, y, cfg):
     return ((x >> y) | (x << (cfg.getw() - y))) & cfg.getMASK()
 
@@ -84,6 +84,12 @@ class Config:
     def getIV(self):
         return self.__IV
 
+class HashFormatter(bytes):
+    def __str__(self):
+        return self.hex()
+    def __repr__(self):
+        return self.hex()
+
 # FUNCTION DEFINITIONS
 
 # Mixing function G
@@ -129,6 +135,19 @@ def compress(h, m, t, f, cfg):
 
 def blake2(data, m='b', k=b'', l=None):
 
+    # Data typecasting
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    elif not isinstance(data, (bytes, bytearray)):
+        raise TypeError("Data has to be either str, bytes or bytearray")
+
+    # Key typecasting
+    if isinstance(k, str):
+        k = k.encode('utf-8')
+    elif not isinstance(k, (bytes, bytearray)):
+        raise TypeError("Key has to be either str, bytes or bytearray")
+
+    # Mode selection
     if m in ('b', 64):
         cfg = Config('b')
         if l is None:
@@ -144,7 +163,6 @@ def blake2(data, m='b', k=b'', l=None):
     kk = len(k)
     bb = cfg.getbb()
     if kk>0:
-        
         key_block = k.ljust(bb, b'\x00')
         buf.extend(key_block)
 
@@ -159,42 +177,38 @@ def blake2(data, m='b', k=b'', l=None):
     else:
         word_char ='I'
 
+    # If the message and key are null
     byte_counter = 0
     if len(buf) == 0:
-        chunk = b'\x00' * bb  # Tworzymy jeden pusty blok samych zer
+        chunk = b'\x00' * bb
         msg_words = list(struct.unpack('<16' + word_char, chunk))
         h = compress(h, msg_words, 0, True, cfg)
-    # Cuts bufor to blocks
+
+    # Cuts buffer into blocks
     else:
         for i in range(0, len(buf), bb):
             chunk = buf[i : i + bb]
-        
-            # Is it the last block?
             f = (i + bb >= len(buf))
-        
-            # COUNTER
-            # Every single full block is exactly 'bb' bytes
-            # If it is the last fragment, it add only this number of bytes that remains before padding
             if f:
-            #How many bytes to the end of buf
                 byte_counter += len(buf) - i
             else:
                 byte_counter += bb
 
-            # PADDING
+            # Padding
             if len(chunk) < bb:
                 chunk = chunk.ljust(bb, b'\x00')
-        
+
             # Processing
             msg_words = list(struct.unpack('<16' + word_char, chunk))
             h = compress(h, msg_words, byte_counter, f, cfg)
+
     #Finalization
     final_bytes=bytearray()
     for word in h:
         final_bytes.extend(struct.pack('<'+word_char, word))
 
     #Returning l bytes
-    return bytes(final_bytes[:l])
+    return HashFormatter(final_bytes[:l])
 
 
 
