@@ -106,7 +106,7 @@ def compress(h, m, t, f, cfg):
     v[12] = v[12] ^ (t & cfg.getMASK())
     v[13] = v[13] ^ (t>>cfg.getw() & cfg.getMASK())
 
-    if f == True:
+    if f:
         v[14] = v[14] ^ cfg.getMASK()
 
     for i in range (0, cfg.getr()):
@@ -127,7 +127,7 @@ def compress(h, m, t, f, cfg):
 
     return h
 
-def blake2(data, m='s', k=b'', l=None):
+def blake2(data, m='b', k=b'', l=None):
     if m in ('b', 64):
         cfg = Config('b')
         if l is None:
