@@ -1,5 +1,13 @@
 import struct
+from dataclasses import dataclass
 # CONSTANT DEFINITIONS
+
+# Config dataclass
+@dataclass(frozen=True)
+class Config:
+    r: int; w: int; bb: int
+    R1: int; R2: int; R3: int; R4: int
+    MASK: int; IV: tuple
 
 # Permutation array
 SIGMA = (
@@ -15,74 +23,41 @@ SIGMA = (
     (10,  2,  8,  4,  7,  6,  1,  5, 15, 11,  9, 14,  3, 12, 13,  0)
 )
 
+CFG_BLAKE2B = Config(
+    r = 12,
+    w = 64,
+    bb = 128,
+    R1 = 32,
+    R2 = 24,
+    R3 = 16,
+    R4 = 63,
+    MASK = 0xFFFFFFFFFFFFFFFF,
+    IV = (
+        0x6a09e667f3bcc908, 0xbb67ae8584caa73b,
+        0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
+        0x510e527fade682d1, 0x9b05688c2b3e6c1f,
+        0x1f83d9abfb41bd6b, 0x5be0cd19137e2179
+    )
+)
+
+CFG_BLAKE2S = Config(
+    r = 10,
+    w = 32,
+    bb = 64,
+    R1 = 16,
+    R2 = 12,
+    R3 = 8,
+    R4 = 7,
+    MASK = 0xFFFFFFFF,
+    IV = (
+        0x6A09E667, 0xBB67AE85,
+        0x3C6EF372, 0xA54FF53A,
+        0x510E527F, 0x9B05688C,
+        0x1F83D9AB, 0x5BE0CD19
+    )
+)
+
 # HELPER FUNCTIONS & CLASSES
-
-# Binary rotation function
-def rot(x, y, cfg):
-    return ((x >> y) | (x << (cfg.getw() - y))) & cfg.getMASK()
-
-# Config class
-class Config:
-    def __init__(self, mode):
-        if mode=='b':
-            self.__r = 12
-            self.__w = 64
-            self.__bb = 128
-            self.__R1 = 32
-            self.__R2 = 24
-            self.__R3 = 16
-            self.__R4 = 63
-            self.__MASK = 0xFFFFFFFFFFFFFFFF
-            self.__IV = (
-                0x6a09e667f3bcc908,
-                0xbb67ae8584caa73b,
-                0x3c6ef372fe94f82b,
-                0xa54ff53a5f1d36f1,
-                0x510e527fade682d1,
-                0x9b05688c2b3e6c1f,
-                0x1f83d9abfb41bd6b,
-                0x5be0cd19137e2179
-            )
-        elif mode == 's':
-            self.__r = 10
-            self.__w = 32
-            self.__bb = 64
-            self.__R1 = 16
-            self.__R2 = 12
-            self.__R3 = 8
-            self.__R4 = 7
-            self.__MASK = 0xFFFFFFFF
-            self.__IV = (
-                0x6A09E667,
-                0xBB67AE85,
-                0x3C6EF372,
-                0xA54FF53A,
-                0x510E527F,
-                0x9B05688C,
-                0x1F83D9AB,
-                0x5BE0CD19
-            )
-
-    def getr(self):
-        return self.__r
-    def getw(self):
-        return self.__w
-    def getb(self):
-        return self.__bb
-    def getbb(self):
-        return self.__bb
-    def getR1(self):
-        return self.__R1
-    def getR2(self):
-        return self.__R2
-    def getR3(self):
-        return self.__R3
-    def getR4(self):
-        return self.__R4
-    def getMASK(self):
-        return self.__MASK
-    def getIV(self):
-        return self.__IV
 
 class HashFormatter(bytes):
     def __str__(self):
@@ -92,44 +67,54 @@ class HashFormatter(bytes):
 
 # FUNCTION DEFINITIONS
 
-# Mixing function G
-def mix(v, a, b, c, d, x, y, cfg):
-    v[a] = (v[a] + v[b] + x) & cfg.getMASK()
-    v[d] = rot(v[d] ^ v[a], cfg.getR1(), cfg)
-
-    v[c] = (v[c] + v[d]) & cfg.getMASK()
-    v[b] = rot(v[b] ^ v[c], cfg.getR2(), cfg)
-
-    v[a] = (v[a] + v[b] + y) & cfg.getMASK()
-    v[d] = rot(v[d] ^ v[a], cfg.getR3(), cfg)
-
-    v[c] = (v[c] + v[d]) & cfg.getMASK()
-    v[b] = rot(v[b] ^ v[c], cfg.getR4(), cfg)
-
 # Compress function (F)
 def compress(h, m, t, f, cfg):
-    v = list(h) + list(cfg.getIV())
-    v[12] = v[12] ^ (t & cfg.getMASK())
-    v[13] = v[13] ^ (t>>cfg.getw() & cfg.getMASK())
+    MASK, w, r = cfg.MASK, cfg.w, cfg.r
+    R1, R2, R3, R4 = cfg.R1, cfg.R2, cfg.R3, cfg.R4
+
+    v = list(h) + list(cfg.IV)
+    v[12] = v[12] ^ (t & MASK)
+    v[13] = v[13] ^ ((t >> w) & MASK)
 
     if f:
-        v[14] = v[14] ^ cfg.getMASK()
+        v[14] = v[14] ^ MASK
 
-    for i in range (0, cfg.getr()):
+    # NESTED FUNCTIONS
+
+
+    # Binary rotation function
+    def rot(x, y):
+        return ((x >> y) | (x << (w - y))) & MASK
+
+    # Mixing function (G)
+    def mix(a, b, c, d, x, y):
+        v[a] = (v[a] + v[b] + x) & MASK
+        v[d] = rot(v[d] ^ v[a], R1)
+
+        v[c] = (v[c] + v[d]) & MASK
+        v[b] = rot(v[b] ^ v[c], R2)
+
+        v[a] = (v[a] + v[b] + y) & MASK
+        v[d] = rot(v[d] ^ v[a], R3)
+
+        v[c] = (v[c] + v[d]) & MASK
+        v[b] = rot(v[b] ^ v[c], R4)
+
+    for i in range(r):
         s = SIGMA[i % 10]
 
-        mix(v, 0, 4, 8, 12, m[s[0]], m[s[1]], cfg)
-        mix(v, 1, 5, 9, 13, m[s[2]], m[s[3]], cfg)
-        mix(v, 2, 6, 10, 14, m[s[4]], m[s[5]], cfg)
-        mix(v, 3, 7, 11, 15, m[s[6]], m[s[7]], cfg)
+        mix(0, 4, 8, 12, m[s[0]], m[s[1]])
+        mix(1, 5, 9, 13, m[s[2]], m[s[3]])
+        mix(2, 6, 10, 14, m[s[4]], m[s[5]])
+        mix(3, 7, 11, 15, m[s[6]], m[s[7]])
 
-        mix(v, 0, 5, 10, 15, m[s[8]], m[s[9]], cfg)
-        mix(v, 1, 6, 11, 12, m[s[10]], m[s[11]], cfg)
-        mix(v, 2, 7, 8, 13, m[s[12]], m[s[13]], cfg)
-        mix(v, 3, 4, 9, 14, m[s[14]], m[s[15]], cfg)
+        mix(0, 5, 10, 15, m[s[8]], m[s[9]])
+        mix(1, 6, 11, 12, m[s[10]], m[s[11]])
+        mix(2, 7, 8, 13, m[s[12]], m[s[13]])
+        mix(3, 4, 9, 14, m[s[14]], m[s[15]])
 
-    for i in range (0,8):
-        h[i] = h[i] ^ v[i] ^ v[i+8]
+    for i in range(8):
+        h[i] = h[i] ^ v[i] ^ v[i + 8]
 
     return h
 
@@ -149,11 +134,11 @@ def blake2(data, m='b', k=b'', l=None):
 
     # Mode selection
     if m in ('b', 64):
-        cfg = Config('b')
+        cfg = CFG_BLAKE2B
         if l is None:
             l = 64
     elif m in ('s', 32):
-        cfg = Config('s')
+        cfg = CFG_BLAKE2S
         if l is None:
             l = 32
     else:
@@ -161,18 +146,20 @@ def blake2(data, m='b', k=b'', l=None):
     
     buf = bytearray()
     kk = len(k)
-    bb = cfg.getbb()
+    bb = cfg.bb
+    max_key = bb
+    if kk > max_key:
+        raise ValueError(f"Key too long: max {max_key} bytes for this variant")
     if kk>0:
         key_block = k.ljust(bb, b'\x00')
         buf.extend(key_block)
 
     #Adding proper message at the end of buf
     buf.extend(data)
-
-    h = list(cfg.getIV())
+    h = list(cfg.IV)
     h[0] = h[0] ^ 0x01010000 ^ (kk<<8) ^ l
     
-    if (cfg.getw()==64):
+    if cfg.w==64:
         word_char ='Q'
     else:
         word_char ='I'
@@ -202,12 +189,17 @@ def blake2(data, m='b', k=b'', l=None):
             msg_words = list(struct.unpack('<16' + word_char, chunk))
             h = compress(h, msg_words, byte_counter, f, cfg)
 
-    #Finalization
+    # Finalization
     final_bytes=bytearray()
     for word in h:
         final_bytes.extend(struct.pack('<'+word_char, word))
 
-    #Returning l bytes
+    # Check if the output has a valid length
+    max_l = 64 if cfg.w == 64 else 32
+    if not (1 <= l <= max_l):
+        raise ValueError(f"Output length must be between 1 and {max_l}")
+
+    # Returning l bytes
     return HashFormatter(final_bytes[:l])
 
 
