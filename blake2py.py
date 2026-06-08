@@ -81,7 +81,6 @@ def compress(h, m, t, f, cfg):
 
     # NESTED FUNCTIONS
 
-
     # Binary rotation function
     def rot(x, y):
         return ((x >> y) | (x << (w - y))) & MASK
@@ -153,19 +152,19 @@ def blake2(data, m='b', k=b'', l=None):
     max_key = max_l
     if kk > max_key:
         raise ValueError(f"Key too long: max {max_key} bytes for this variant")
-    if kk>0:
+    if kk > 0:
         key_block = k.ljust(bb, b'\x00')
         buf.extend(key_block)
 
-    #Adding proper message at the end of buf
+    #Adding the proper message at the end of buf
     buf.extend(data)
     h = list(cfg.IV)
     h[0] = h[0] ^ 0x01010000 ^ (kk<<8) ^ l
     
-    if cfg.w==64:
-        word_char ='Q'
+    if cfg.w == 64:
+        word_char = 'Q'
     else:
-        word_char ='I'
+        word_char = 'I'
 
     # If the message and key are null
     byte_counter = 0
@@ -193,7 +192,7 @@ def blake2(data, m='b', k=b'', l=None):
             h = compress(h, msg_words, byte_counter, f, cfg)
 
     # Finalization
-    final_bytes=bytearray()
+    final_bytes = bytearray()
     for word in h:
         final_bytes.extend(struct.pack('<'+word_char, word))
 
