@@ -180,14 +180,11 @@ def blake2(data, m='b', k=b'', l=None):
             f = (i + bb >= len(buf))
             if f:
                 byte_counter += len(buf) - i
+                if len(chunk) < bb:
+                    chunk = chunk.ljust(bb, b'\x00')
             else:
                 byte_counter += bb
 
-            # Padding
-            if len(chunk) < bb:
-                chunk = chunk.ljust(bb, b'\x00')
-
-            # Processing
             msg_words = list(struct.unpack('<16' + word_char, chunk))
             h = compress(h, msg_words, byte_counter, f, cfg)
 
